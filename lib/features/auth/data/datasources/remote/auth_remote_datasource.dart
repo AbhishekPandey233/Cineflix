@@ -44,30 +44,36 @@ class AuthRemoteDatasource implements IAuthRemoteDataSource{
     if (response.data['success'] == true) {
       final token = response.data['token'] as String?;
       if (token != null) {
+        final userData = response.data['data'] as Map<String, dynamic>?;
+
         // Decode JWT token to get user ID
         final decodedToken = JwtDecoder.decode(token);
-        final userId = decodedToken['id'] as String;
+        final userId =
+            (userData?['_id'] ?? decodedToken['id'] ?? '').toString();
+        final fullName =
+            (userData?['name'] ??
+                    userData?['fullName'] ??
+                    _userSessionService.getCurrentUserFullName() ??
+                    '')
+                .toString();
 
         // Save token
         await _userSessionService.saveToken(token);
 
-        // Try to get user data from local storage first
-        final storedFullName = _userSessionService.getCurrentUserFullName();
-
         // Create user object with stored data
         final user = AuthApiModel(
           id: userId,
-          fullName: storedFullName ?? '', // Use stored data or empty string
+          fullName: fullName,
           email: email,
-          password: null, 
-          username: '',
+          password: null,
+          username: fullName,
         );
 
         // Update stored session with latest info
         await _userSessionService.saveUserSession(
           userId: userId,
           email: email,
-          fullName: user.fullName, 
+          fullName: user.fullName,
         );
 
         return user;
@@ -79,9 +85,14 @@ class AuthRemoteDatasource implements IAuthRemoteDataSource{
 
   @override
   Future<AuthApiModel> register(AuthApiModel user) async {
+    final payload = {
+      ...user.toJson(),
+      'confirmPassword': user.password,
+    };
+
     final response = await _apiClient.post(
       ApiEndpoints.customerRegister,
-      data: user.toJson(),
+      data: payload,
     );
     if (response.data['success'] == true) {
       final data = response.data['data'] as Map<String, dynamic>;
