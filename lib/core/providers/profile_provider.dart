@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:ceniflix/core/api/api_endpoint.dart';
 import 'package:dio/dio.dart';
+import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,13 +10,33 @@ import 'package:ceniflix/core/services/storage/user_session_service.dart';
 import 'package:ceniflix/features/bottom_screens/data/datasources/profile_remote_datasource.dart';
 
 final dioProvider = Provider<Dio>((ref) {
-  return Dio(
+  final dio = Dio(
     BaseOptions(
-      baseUrl: ApiEndpoints.serverUrl,
+      baseUrl: ApiEndpoints.baseUrl,
       connectTimeout: ApiEndpoints.connectionTimeout,
       receiveTimeout: ApiEndpoints.receiveTimeout,
     ),
   );
+  
+  // Add retry interceptor for network resilience
+  dio.interceptors.add(
+    RetryInterceptor(
+      dio: dio,
+      retries: 2,
+      retryDelays: const [
+        Duration(seconds: 1),
+        Duration(seconds: 2),
+      ],
+      retryEvaluator: (error, attempt) {
+        return error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.sendTimeout ||
+            error.type == DioExceptionType.receiveTimeout ||
+            error.type == DioExceptionType.connectionError;
+      },
+    ),
+  );
+  
+  return dio;
 });
 
 class ProfileState {
