@@ -66,8 +66,14 @@ class AuthRepository implements IAuthRepository{
         }
         return const Left(ApiFailure(message: "Invalid email or password"));
       } on DioException catch (e) {
+        final message =
+            e.response?.data?['message']?.toString() ??
+            (e.type == DioExceptionType.connectionTimeout ||
+                    e.type == DioExceptionType.connectionError
+                ? 'Cannot reach server. Check API host/IP and backend status.'
+                : 'Login failed');
         return Left(ApiFailure(
-          message: e.response?.data?['message'] ?? 'Login failed',
+          message: message,
           statusCode: e.response?.statusCode,
           ));
       } catch (e) {
@@ -110,8 +116,14 @@ class AuthRepository implements IAuthRepository{
         await _authRemoteDataSource.register(apiModel);
         return const Right(true);
       } on DioException catch (e) {
+        final message =
+            e.response?.data?['message']?.toString() ??
+            (e.type == DioExceptionType.connectionTimeout ||
+                    e.type == DioExceptionType.connectionError
+                ? 'Cannot reach server. Check API host/IP and backend status.'
+                : 'Registration failed');
         return Left(ApiFailure(
-          message: e.response?.data?['message'] ?? 'Registration failed',
+          message: message,
           statusCode: e.response?.statusCode,
           ));
       } catch (e) {
