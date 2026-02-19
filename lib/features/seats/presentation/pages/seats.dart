@@ -1,283 +1,550 @@
+import 'package:ceniflix/core/api/api_client.dart';
+import 'package:ceniflix/features/seats/data/datasources/remote/booking_remote_datasource.dart';
+import 'package:ceniflix/features/seats/data/models/seat_availability_model.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 class SeatsScreen extends StatefulWidget {
-  const SeatsScreen({super.key});
+  const SeatsScreen({
+    required this.showtimeId,
+    this.movieTitle,
+    super.key,
+  });
+
+  final String showtimeId;
+  final String? movieTitle;
 
   @override
   State<SeatsScreen> createState() => _SeatsScreenState();
 }
 
 class _SeatsScreenState extends State<SeatsScreen> {
-  static const available = Color(0xFF3A3A3A);
-  static const selected = Color(0xFF2ECC71);
-  static const reserved = Color(0xFFB0B0B0);
+  static const int _maxSeats = 10;
+  final BookingRemoteDataSource _bookingRemoteDataSource =
+      BookingRemoteDataSource(ApiClient());
 
-  static const maxSelection = 10;
+  bool _loading = true;
+  bool _booking = false;
+  String _error = '';
 
-  late List<List<Color>> rows;
-
-  final rowLabels = ["A", "B", "C", "D", "E", "F"];
+  SeatAvailabilityModel? _seatData;
+  final Set<String> _selectedSeats = <String>{};
 
   @override
   void initState() {
     super.initState();
-    rows = [
-      [available, available, available, available, available, available, available, available],
-      [available, available, available, available, available, available, available, available],
-      [available, available, available, available, available, available, available, available],
-      [available, available, available, available, available, available, available, available],
-      [available, available, available, available, available, available, available, available],
-      [available, available, available, available, available, available, available, available],
-    ];
+    _loadSeatAvailability();
   }
 
-  int get selectedCount =>
-      rows.expand((row) => row).where((seat) => seat == selected).length;
+  Future<void> _loadSeatAvailability() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
 
-  void _toggleSeat(int rowIndex, int seatIndex) {
-    final color = rows[rowIndex][seatIndex];
+    try {
+      final data = await _bookingRemoteDataSource.getSeatAvailability(
+        widget.showtimeId,
+      );
 
-    if (color == reserved) return;
+      if (!mounted) return;
+      setState(() {
+        _seatData = data;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _extractApiError(e, fallback: 'Failed to load seats');
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load seats';
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  String _extractApiError(DioException error, {required String fallback}) {
+    final responseData = error.response?.data;
+    if (responseData is Map<String, dynamic>) {
+      final message = responseData['message']?.toString();
+      if (message != null && message.trim().isNotEmpty) {
+        return message;
+      }
+    }
+    return fallback;
+  }
+
+  bool get _limitReached => _selectedSeats.length >= _maxSeats;
+
+  double get _pricePerSeat => _seatData?.price ?? 0;
+
+  double get _totalPrice => _selectedSeats.length * _pricePerSeat;
+
+  Set<String> get _bookedSet =>
+      (_seatData?.bookedSeats ?? const <String>[]).map((s) => s.toUpperCase()).toSet();
+
+  void _toggleSeat(String seatLabel) {
+    final normalized = seatLabel.toUpperCase();
+    if (_bookedSet.contains(normalized)) return;
 
     setState(() {
-      // unselect
-      if (color == selected) {
-        rows[rowIndex][seatIndex] = available;
+      if (_selectedSeats.contains(normalized)) {
+        _selectedSeats.remove(normalized);
         return;
       }
 
-      // select (respect max limit)
-      if (selectedCount >= maxSelection) {
-        // Optional: show message (remove if you don't want it)
+      if (_selectedSeats.length >= _maxSeats) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("You can select up to 10 seats only."),
-            duration: Duration(seconds: 2),
-          ),
+          const SnackBar(content: Text('You can select up to 10 seats only.')),
         );
         return;
       }
 
-      rows[rowIndex][seatIndex] = selected;
+      _selectedSeats.add(normalized);
     });
   }
 
-  void _showCancelDialog() {
-    showDialog(
+  Future<void> _clearSelectionConfirm() async {
+    if (_selectedSeats.isEmpty) return;
+
+    final shouldClear = await showDialog<bool>(
       context: context,
-      barrierDismissible: true,
       builder: (context) {
         return AlertDialog(
-          title: const Text("Cancel Selection?"),
-          content: const Text(
-            "Are you sure you want to clear all selected seats?",
-          ),
+          title: const Text('Clear selection?'),
+          content: const Text('This will deselect all chosen seats.'),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context); // close dialog
-              },
-              child: const Text("Continue"),
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Go Back'),
             ),
             ElevatedButton(
-              style: _primaryButtonStyle(Colors.orange),
-              onPressed: () {
-                setState(() {
-                  for (int r = 0; r < rows.length; r++) {
-                    for (int c = 0; c < rows[r].length; c++) {
-                      if (rows[r][c] == selected) {
-                        rows[r][c] = available;
-                      }
-                    }
-                  }
-                });
-                Navigator.pop(context); // close dialog
-              },
-              child: const Text("Confirm"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirm'),
             ),
           ],
         );
       },
     );
+
+    if (shouldClear == true && mounted) {
+      setState(_selectedSeats.clear);
+    }
   }
 
-  Widget _seat({
-    required int rowIndex,
-    required int seatIndex,
-  }) {
-    final color = rows[rowIndex][seatIndex];
+  Future<void> _showBookingConfirmation() async {
+    if (_selectedSeats.isEmpty || _booking) return;
 
-    return GestureDetector(
-      onTap: () => _toggleSeat(rowIndex, seatIndex),
-      child: Container(
-        width: 26,
-        height: 26,
-        alignment: Alignment.center,
-        margin: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          "${seatIndex + 1}",
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final selected = _selectedSeats.toList()..sort();
+
+        return AlertDialog(
+          title: const Text('Confirm Booking'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Seats: ${selected.join(', ')}'),
+              const SizedBox(height: 6),
+              Text('Quantity: ${selected.length}'),
+              const SizedBox(height: 6),
+              Text(
+                'Total Price: ₹${_totalPrice.toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _seatRow(int rowIndex) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: 18,
-          child: Text(
-            rowLabels[rowIndex],
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w700,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-        const SizedBox(width: 8),
-        ...List.generate(
-          rows[rowIndex].length,
-          (seatIndex) => _seat(rowIndex: rowIndex, seatIndex: seatIndex),
-        ),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 18,
-          child: Text(
-            rowLabels[rowIndex],
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w700,
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirm'),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
+
+    if (confirmed == true) {
+      await _confirmBooking();
+    }
   }
 
-  ButtonStyle _primaryButtonStyle(Color bg) {
-    return ElevatedButton.styleFrom(
-      backgroundColor: bg,
-      foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
-      textStyle: const TextStyle(fontWeight: FontWeight.w700),
-    );
+  Future<void> _confirmBooking() async {
+    if (_selectedSeats.isEmpty || _booking) return;
+
+    setState(() {
+      _booking = true;
+      _error = '';
+    });
+
+    try {
+      final selected = _selectedSeats.toList()..sort();
+      final bookingId = await _bookingRemoteDataSource.createBooking(
+        showtimeId: widget.showtimeId,
+        seats: selected,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            bookingId != null
+                ? 'Booking successful (#$bookingId)'
+                : 'Booking successful',
+          ),
+        ),
+      );
+
+      Navigator.of(context).pop(true);
+    } on DioException catch (e) {
+      if (!mounted) return;
+      final status = e.response?.statusCode;
+      final fallback = status == 401
+          ? 'Please login first to complete booking'
+          : 'Booking failed';
+
+      setState(() {
+        _error = _extractApiError(e, fallback: fallback);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Booking failed';
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _booking = false;
+      });
+    }
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) return '-';
+    final local = value.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    return '${local.month}/${local.day}/${local.year}, $hour:$minute $period';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 207, 38, 38),
-      appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 164, 59, 59),
-        title: const Text(
-          "Select Seats",
-          style: TextStyle(fontWeight: FontWeight.w700),
+    if (_loading) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Select Your Seats'),
         ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                "SCREEN",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error.isNotEmpty && _seatData == null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Select Your Seats'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _error,
+                  style: const TextStyle(color: Colors.redAccent),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const _ScreenArc(),
-            const SizedBox(height: 40),
-            ...List.generate(
-              rows.length,
-              (i) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _seatRow(i),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: const [
-                _LegendItem(text: "Available", color: available),
-                _LegendItem(text: "Selected", color: selected),
-                _LegendItem(text: "Reserved", color: reserved),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: _loadSeatAvailability,
+                  child: const Text('Retry'),
+                ),
               ],
             ),
-            const SizedBox(height: 24),
-            Text(
-              "Seats selected: $selectedCount / $maxSelection",
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 40),
+          ),
+        ),
+      );
+    }
 
-            // Book Now (always enabled, always green + white)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: _primaryButtonStyle(Colors.green),
-                onPressed: () {},
-                child: const Text("Book Now"),
-              ),
-            ),
+    final seatData = _seatData;
+    if (seatData == null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Select Your Seats'),
+        ),
+        body: const Center(
+          child: Text('No seat data available', style: TextStyle(color: Colors.white70)),
+        ),
+      );
+    }
 
-            const SizedBox(height: 12),
+    final rows = seatData.layout.rows;
+    final seatsPerRow = seatData.layout.seatsPerRow;
 
-            // Cancel (orange + white, same style)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: _primaryButtonStyle(Colors.orange),
-                onPressed: _showCancelDialog,
-                child: const Text("Cancel"),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Select Your Seats'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadSeatAvailability,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.movieTitle ?? 'Seat Selection',
+                style: const TextStyle(
+                  color: Colors.redAccent,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              const Text(
+                'Select Your Seats',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${_formatDateTime(seatData.startTime)} • ${seatData.hallName}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 18),
+              const _ScreenHeader(),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Tip: Seats closer to the center usually have the best view.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    const Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        _LegendItem(label: 'Available', color: Color(0x1AFFFFFF), border: Color(0x26FFFFFF)),
+                        _LegendItem(label: 'Selected', color: Color(0x334ADE80), border: Color(0xAA4ADE80)),
+                        _LegendItem(label: 'Booked', color: Color(0x66808080), border: Color(0x99808080)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Column(
+                        children: rows.map((row) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _SeatRow(
+                              row: row,
+                              seatsPerRow: seatsPerRow,
+                              selectedSeats: _selectedSeats,
+                              bookedSeats: _bookedSet,
+                              seatLimitReached: _limitReached,
+                              onTapSeat: _toggleSeat,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(child: Container(height: 1, color: Colors.white12)),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Text('Aisle', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                        ),
+                        Expanded(child: Container(height: 1, color: Colors.white12)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Your Selection',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_selectedSeats.isEmpty)
+                      const Text(
+                        'No seats selected',
+                        style: TextStyle(color: Colors.white70),
+                      )
+                    else ...[
+                      Text(
+                        '${_selectedSeats.length} seat(s) - ₹${_totalPrice.toStringAsFixed(0)}',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        (_selectedSeats.toList()..sort()).join(', '),
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      if (_limitReached)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Seat limit reached. Deselect to choose another.',
+                            style: TextStyle(color: Color(0xFFFFD27D), fontSize: 11),
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 14),
+                    _PriceRow(
+                      label: 'Price per seat',
+                      value: '₹${_pricePerSeat.toStringAsFixed(0)}',
+                    ),
+                    const SizedBox(height: 6),
+                    _PriceRow(
+                      label: 'Total',
+                      value: '₹${_totalPrice.toStringAsFixed(0)}',
+                      bold: true,
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFC1121F),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _selectedSeats.isEmpty || _booking
+                            ? null
+                            : _showBookingConfirmation,
+                        child: Text(_booking ? 'Processing...' : 'Book Seats'),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _selectedSeats.isEmpty ? null : _clearSelectionConfirm,
+                        child: const Text('Clear Selection'),
+                      ),
+                    ),
+                    if (_error.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text(
+                          _error,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'You can change seats before payment confirmation.',
+                      style: TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ScreenArc extends StatelessWidget {
-  const _ScreenArc();
+class _ScreenHeader extends StatelessWidget {
+  const _ScreenHeader();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 60,
-      width: double.infinity,
-      child: CustomPaint(
-        painter: _ScreenArcPainter(),
-      ),
+    return Column(
+      children: [
+        SizedBox(
+          height: 46,
+          width: double.infinity,
+          child: CustomPaint(painter: _ScreenArcPainter()),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+          ),
+          child: const Text(
+            'SCREEN THIS WAY',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.6,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -286,51 +553,223 @@ class _ScreenArcPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.9)
+      ..color = Colors.white.withValues(alpha: 0.40)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
 
     final path = Path()
-      ..moveTo(size.width * 0.08, size.height * 0.9)
+      ..moveTo(size.width * 0.08, size.height * 0.85)
       ..quadraticBezierTo(
         size.width * 0.5,
-        size.height * 0.05,
+        2,
         size.width * 0.92,
-        size.height * 0.9,
+        size.height * 0.85,
       );
 
     canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(_) => false;
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _LegendItem extends StatelessWidget {
-  const _LegendItem({required this.text, required this.color});
+class _SeatRow extends StatelessWidget {
+  const _SeatRow({
+    required this.row,
+    required this.seatsPerRow,
+    required this.selectedSeats,
+    required this.bookedSeats,
+    required this.seatLimitReached,
+    required this.onTapSeat,
+  });
 
-  final String text;
-  final Color color;
+  final String row;
+  final int seatsPerRow;
+  final Set<String> selectedSeats;
+  final Set<String> bookedSeats;
+  final bool seatLimitReached;
+  final ValueChanged<String> onTapSeat;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        SizedBox(
+          width: 16,
+          child: Text(
+            row,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(width: 10),
+        ...List.generate(seatsPerRow, (i) {
+          final seatNumber = i + 1;
+          final label = '$row$seatNumber';
+          final normalized = label.toUpperCase();
+          final isBooked = bookedSeats.contains(normalized);
+          final isSelected = selectedSeats.contains(normalized);
+          final isDisabled = !isSelected && seatLimitReached;
+          final isAisle = seatNumber == 7;
+
+          return Row(
+            children: [
+              if (isAisle)
+                Container(
+                  width: 10,
+                  height: 34,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white12),
+                    borderRadius: BorderRadius.circular(20),
+                    color: Colors.white.withValues(alpha: 0.03),
+                  ),
+                ),
+              _SeatButton(
+                label: label,
+                selected: isSelected,
+                booked: isBooked,
+                disabled: isDisabled,
+                onTap: () => onTapSeat(label),
+              ),
+              const SizedBox(width: 6),
+            ],
+          );
+        }),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 16,
+          child: Text(
+            row,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SeatButton extends StatelessWidget {
+  const _SeatButton({
+    required this.label,
+    required this.selected,
+    required this.booked,
+    required this.disabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool booked;
+  final bool disabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    Color borderColor = Colors.white.withValues(alpha: 0.15);
+    Color background = Colors.white.withValues(alpha: 0.05);
+    Color textColor = Colors.white.withValues(alpha: 0.90);
+
+    if (booked) {
+      borderColor = Colors.grey.shade600;
+      background = Colors.grey.withValues(alpha: 0.32);
+      textColor = Colors.white54;
+    } else if (selected) {
+      borderColor = const Color(0xFF4ADE80);
+      background = const Color(0x334ADE80);
+      textColor = const Color(0xFFEFFFF5);
+    }
+
+    return SizedBox(
+      width: 34,
+      height: 34,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: booked || (disabled && !selected) ? null : onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: textColor.withValues(alpha: disabled && !selected ? 0.55 : 1),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({
+    required this.label,
+    required this.color,
+    required this.border,
+  });
+
+  final String label;
+  final Color color;
+  final Color border;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
         Container(
-          width: 14,
-          height: 14,
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: border),
           ),
         ),
         const SizedBox(width: 6),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+      ],
+    );
+  }
+}
+
+class _PriceRow extends StatelessWidget {
+  const _PriceRow({required this.label, required this.value, this.bold = false});
+
+  final String label;
+  final String value;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
         Text(
-          text,
-          style: const TextStyle(
+          label,
+          style: TextStyle(
             color: Colors.white70,
             fontSize: 12,
-            fontWeight: FontWeight.w600,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
           ),
         ),
       ],

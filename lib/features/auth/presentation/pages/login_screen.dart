@@ -47,19 +47,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   InputDecoration _decoration(String hint, IconData icon) {
     return InputDecoration(
-      prefixIcon: Icon(icon, color: Colors.redAccent.shade700, size: 20),
+      prefixIcon: Icon(icon, color: const Color(0xFFEF233C), size: 20),
       hintText: hint,
-      hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+      hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: const Color(0xFF1A1A1A),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
-        borderSide: BorderSide(color: Colors.grey.shade200),
+        borderSide: const BorderSide(color: Color(0xFF333333)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+        borderSide: const BorderSide(color: Color(0xFFEF233C), width: 2),
       ),
     );
   }
@@ -82,19 +82,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = authState.status == AuthStatus.loading;
 
     return Scaffold(
+      backgroundColor: const Color(0xFF0D0D0D),
       body: Container(
         width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFE53935),
-              Color(0xFFB71C1C),
-              Color(0xFF1A1A1A),
-            ],
-          ),
-        ),
+        color: const Color(0xFF0D0D0D),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -103,12 +94,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(20),
-                    decoration: const BoxDecoration(
-                      color: Colors.white24,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFEF233C), width: 2),
                     ),
                     child: const Icon(Icons.lock_outline,
-                        size: 60, color: Colors.white),
+                        size: 60, color: Color(0xFFEF233C)),
                   ),
                   const SizedBox(height: 20),
                   const Text(
@@ -130,21 +122,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(25),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
-                        )
-                      ],
+                      border: Border.all(color: Colors.white12),
                     ),
                     child: Column(
                       children: [
                         TextField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
+                          style: const TextStyle(color: Colors.white),
                           decoration: _decoration(
                               "Email Address", Icons.email_outlined),
                         ),
@@ -152,6 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         TextField(
                           controller: _passCtrl,
                           obscureText: true,
+                          style: const TextStyle(color: Colors.white),
                           decoration: _decoration(
                               "Password", Icons.lock_open_rounded),
                         ),
@@ -162,9 +150,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           height: 55,
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFB71C1C),
+                              backgroundColor: const Color(0xFFEF233C),
                               foregroundColor: Colors.white,
-                              elevation: 4,
+                              elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(15),
                               ),

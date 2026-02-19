@@ -27,7 +27,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
     _movieRemoteDataSource = MovieRemoteDataSource(apiClient);
     _bookingRemoteDataSource = BookingRemoteDataSource(apiClient);
     _nowShowingFuture = _movieRemoteDataSource.getNowShowingMovies();
-    _comingSoonFuture = _movieRemoteDataSource.getComingSoonMovies()
+    _comingSoonFuture = _movieRemoteDataSource.getComingSoonMovies();
   }
 
   String _extractApiError(DioException error, {required String fallback}) {

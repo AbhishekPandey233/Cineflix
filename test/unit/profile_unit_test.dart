@@ -1,8 +1,7 @@
+import 'package:ceniflix/features/bottom_screens/presentation/providers/profile_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-
-import 'package:ceniflix/core/providers/profile_provider.dart';
 import 'package:ceniflix/core/services/storage/user_session_service.dart';
 
 class MockDio extends Mock implements Dio {}

@@ -94,4 +94,35 @@ class ProfileRemoteDataSource {
 
     throw Exception('Upload failed: image URL not returned by server');
   }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String name,
+    required String email,
+  }) async {
+    final token = await _session.getToken();
+
+    if (token == null || token.isEmpty) {
+      throw Exception("Token missing. Please login again.");
+    }
+
+    final formData = FormData.fromMap({
+      'name': name,
+      'email': email,
+    });
+
+    final response = await _dio.put(
+      ApiEndpoints.currentUserProfile,
+      data: formData,
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      ),
+    );
+
+    final data = response.data['data'];
+    if (data is Map<String, dynamic>) return data;
+
+    return <String, dynamic>{};
+  }
 }

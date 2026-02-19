@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ceniflix/core/services/storage/user_session_service.dart';
-import 'package:ceniflix/features/bottom_screens/data/datasources/profile_remote_datasource.dart';
+import 'package:ceniflix/features/bottom_screens/data/datasources/remote/profile_remote_datasource.dart';
 
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
@@ -130,6 +130,34 @@ class ProfileController extends StateNotifier<ProfileState> {
         loading: false,
         error: e.toString(),
       );
+    }
+  }
+
+  Future<void> updateProfile({
+    required String name,
+    required String email,
+  }) async {
+    state = state.copyWith(loading: true, error: null);
+
+    try {
+      final remote = ProfileRemoteDataSource(_dio, _session);
+      final data = await remote.updateProfile(name: name, email: email);
+
+      final userId = _session.getCurrentUserId();
+      final updatedName = (data['name'] ?? name).toString();
+      final updatedEmail = (data['email'] ?? email).toString();
+
+      if (userId != null) {
+        await _session.saveUserSession(
+          userId: userId,
+          email: updatedEmail,
+          fullName: updatedName,
+        );
+      }
+
+      state = state.copyWith(loading: false);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
     }
   }
 
