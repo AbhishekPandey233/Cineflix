@@ -35,7 +35,16 @@ class ApiEndpoints {
 
   static const String currentUserProfile = '/user/profile';
   static const String uploadUserAvatar = '/users/avatar';
+  static const String movies = '/movies';
+  static const String nowShowingMovies = '/movies/now-showing';
+  static const String comingSoonMovies = '/movies/coming-soon';
+  static const String bookings = '/bookings';
 
   static String customerById(String id) => '/users/$id';
   static String uploadProfilePicture(String id) => '/users/$id/profile-picture';
+  static String movieById(String id) => '/movies/$id';
+  static String showtimesByMovie(String movieId) => '/showtimes/movie/$movieId';
+  static String seatAvailability(String showtimeId) => '/showtimes/$showtimeId/seats';
+  static String cancelBooking(String bookingId) => '/bookings/$bookingId';
+  static const String userBookingHistory = '/bookings/user/history';
 }
