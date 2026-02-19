@@ -1,0 +1,65 @@
+class UserBookingModel {
+  final String id;
+  final String showtimeId;
+  final String movieId;
+  final String movieTitle;
+  final String hallId;
+  final String hallName;
+  final DateTime? startTime;
+  final double price;
+  final List<String> seats;
+  final double totalPrice;
+  final String status;
+  final String? canceledBy;
+  final DateTime? createdAt;
+
+  const UserBookingModel({
+    required this.id,
+    required this.showtimeId,
+    required this.movieId,
+    required this.movieTitle,
+    required this.hallId,
+    required this.hallName,
+    required this.startTime,
+    required this.price,
+    required this.seats,
+    required this.totalPrice,
+    required this.status,
+    required this.canceledBy,
+    required this.createdAt,
+  });
+
+  bool get isConfirmed => status.toLowerCase() == 'confirmed';
+
+  factory UserBookingModel.fromJson(Map<String, dynamic> json) {
+    final showtime = json['showtimeId'];
+    final showtimeMap = showtime is Map<String, dynamic>
+        ? showtime
+        : <String, dynamic>{};
+
+    final movie = showtimeMap['movieId'];
+    final movieMap = movie is Map<String, dynamic> ? movie : <String, dynamic>{};
+
+    final rawSeats = json['seats'];
+
+    return UserBookingModel(
+      id: (json['_id'] ?? '').toString(),
+      showtimeId: (showtimeMap['_id'] ?? '').toString(),
+      movieId: (movieMap['_id'] ?? '').toString(),
+      movieTitle: (movieMap['title'] ?? 'Unknown Movie').toString(),
+      hallId: (showtimeMap['hallId'] ?? '').toString(),
+      hallName: (showtimeMap['hallName'] ?? '').toString(),
+      startTime: showtimeMap['startTime'] != null
+          ? DateTime.tryParse(showtimeMap['startTime'].toString())
+          : null,
+      price: double.tryParse((showtimeMap['price'] ?? '').toString()) ?? 0,
+      seats: rawSeats is List ? rawSeats.map((e) => e.toString()).toList() : const [],
+      totalPrice: double.tryParse((json['totalPrice'] ?? '').toString()) ?? 0,
+      status: (json['status'] ?? '').toString(),
+      canceledBy: json['canceledBy']?.toString(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString())
+          : null,
+    );
+  }
+}
