@@ -1,5 +1,7 @@
 import 'package:ceniflix/features/auth/domain/usecases/login_usecase.dart';
 import 'package:ceniflix/features/auth/domain/usecases/register_usecase.dart';
+import 'package:ceniflix/features/auth/domain/usecases/get_current_user_usecase.dart';
+import 'package:ceniflix/features/auth/domain/entities/auth_entity.dart';
 import 'package:ceniflix/features/auth/presentation/state/auth_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,11 +13,13 @@ final authViewModelProvider =
 class AuthViewModel extends Notifier<AuthState> {
   late final RegisterUsecase _registerUsecase;
   late final LoginUsecase _loginUsecase;
+  late final GetCurrentUserUsecase _getCurrentUserUsecase;
 
   @override
   AuthState build() {
     _registerUsecase = ref.read(registerUsecaseProvider);
     _loginUsecase = ref.read(loginUsecaseProvider);
+    _getCurrentUserUsecase = ref.read(getCurrentUserUsecaseProvider);
     return const AuthState();
   }
 
@@ -75,6 +79,34 @@ class AuthViewModel extends Notifier<AuthState> {
           authEntity: authEntity,
         );
       },
+    );
+  }
+
+  Future<void> loadCurrentUser() async {
+    state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
+
+    final result = await _getCurrentUserUsecase();
+    result.fold(
+      (failure) {
+        state = state.copyWith(
+          status: AuthStatus.error,
+          errorMessage: failure.message,
+        );
+      },
+      (authEntity) {
+        state = state.copyWith(
+          status: AuthStatus.authenticated,
+          authEntity: authEntity,
+        );
+      },
+    );
+  }
+
+  void authenticateFromBinding(AuthEntity entity) {
+    state = state.copyWith(
+      status: AuthStatus.authenticated,
+      authEntity: entity,
+      errorMessage: null,
     );
   }
 }

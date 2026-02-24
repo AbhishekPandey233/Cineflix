@@ -5,6 +5,10 @@ import 'signup_screen.dart';
 import '../../../dashboard/presentation/pages/home_screen.dart';
 import '../view_model/auth_view_model.dart';
 import '../state/auth_state.dart';
+import 'package:ceniflix/features/sensor/presentation/view_model/biometric_view_model.dart';
+import 'package:ceniflix/features/sensor/presentation/state/biometric_state.dart';
+import 'package:ceniflix/core/services/storage/user_session_service.dart';
+import 'package:ceniflix/features/auth/domain/entities/auth_entity.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -36,6 +40,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
       }
     });
+
+    ref.listenManual<BiometricState>(biometricViewModelProvider, (prev, next) {
+      if (!mounted) return;
+      if (next.status == BiometricStatus.error && next.errorMessage != null) {
+        _showSnack(next.errorMessage!);
+      }
+    });
+
   }
 
   @override
@@ -185,6 +197,92 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold),
                                   ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.25),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                              ),
+                              onPressed: isLoading
+                                  ? null
+                                  : () async {
+                                        final accountId =
+                                          _emailCtrl.text.trim().toLowerCase();
+                                      if (accountId.isEmpty) {
+                                        _showSnack(
+                                            "Enter your email to use biometrics");
+                                        return;
+                                      }
+
+                                      final success = await ref
+                                          .read(biometricViewModelProvider
+                                              .notifier)
+                                          .loginWithBiometrics(accountId);
+                                      if (!success || !mounted) return;
+
+                                        final binding = await ref
+                                          .read(biometricViewModelProvider
+                                            .notifier)
+                                          .getBinding();
+
+                                        final session =
+                                          ref.read(userSessionServiceProvider);
+                                        if (binding != null) {
+                                        await session.saveUserSession(
+                                          userId: binding.userId ?? accountId,
+                                          email: binding.email ?? accountId,
+                                          fullName:
+                                            binding.fullName ?? accountId,
+                                        );
+                                          if (binding.token != null &&
+                                              binding.token!.isNotEmpty) {
+                                            await session.saveToken(binding.token!);
+                                          }
+                                          ref
+                                              .read(authViewModelProvider.notifier)
+                                              .authenticateFromBinding(
+                                                AuthEntity(
+                                                  authId:
+                                                      binding.userId ?? accountId,
+                                                  fullName:
+                                                      binding.fullName ?? accountId,
+                                                  username:
+                                                      binding.fullName ?? accountId,
+                                                  email: binding.email ?? accountId,
+                                                ),
+                                              );
+                                          if (!mounted) return;
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => const HomeScreen(),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        _showSnack(
+                                            "No biometric binding found for this account");
+                                    },
+                              icon: const Icon(Icons.fingerprint),
+                              label: const Text(
+                                "SIGN IN WITH FINGERPRINT",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],

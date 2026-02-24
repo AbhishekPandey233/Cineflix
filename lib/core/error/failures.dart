@@ -27,3 +27,9 @@ class ApiFailure extends Failure {
   @override
   List<Object?> get props => [message, statusCode];
 }
+
+class BiometricFailure extends Failure {
+  const BiometricFailure({
+    String message = 'Biometric authentication failed',
+  }) : super(message);
+}

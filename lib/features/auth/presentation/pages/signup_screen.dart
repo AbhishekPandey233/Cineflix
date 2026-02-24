@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'login_screen.dart';
 import '../view_model/auth_view_model.dart';
 import '../state/auth_state.dart';
+import 'package:ceniflix/features/sensor/presentation/view_model/biometric_view_model.dart';
+import 'package:ceniflix/features/sensor/presentation/state/biometric_state.dart';
+import 'package:ceniflix/core/services/storage/user_session_service.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -17,6 +20,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
+  bool _enableBiometrics = false;
 
   @override
   void initState() {
@@ -33,14 +37,17 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         }
 
         if (next.status == AuthStatus.registered) {
-          _showSnack("Registration successful. Please login.");
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-          );
+          _handlePostRegister();
         }
       },
     );
+
+    ref.listenManual<BiometricState>(biometricViewModelProvider, (prev, next) {
+      if (!mounted) return;
+      if (next.status == BiometricStatus.error && next.errorMessage != null) {
+        _showSnack(next.errorMessage!);
+      }
+    });
   }
 
   @override
@@ -168,6 +175,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           decoration: _decoration("Confirm Password", Icons.lock_open_rounded),
                         ),
                         const SizedBox(height: 26),
+                        SwitchListTile.adaptive(
+                          value: _enableBiometrics,
+                          onChanged: isLoading
+                              ? null
+                              : (value) {
+                                  setState(() => _enableBiometrics = value);
+                                },
+                          activeColor: const Color(0xFFEF233C),
+                          title: const Text(
+                            "Enable fingerprint on this device",
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                          subtitle: const Text(
+                            "Only this account can use biometrics on this phone",
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        const SizedBox(height: 16),
 
                         SizedBox(
                           width: double.infinity,
@@ -278,5 +304,35 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           email: email,
           password: pass,
         );
+  }
+
+  Future<void> _handlePostRegister() async {
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim().toLowerCase();
+    final session = ref.read(userSessionServiceProvider);
+    final token = await session.getToken();
+
+    if (_enableBiometrics && email.isNotEmpty) {
+      final enrolled = await ref
+          .read(biometricViewModelProvider.notifier)
+          .enrollBiometrics(
+            accountId: email,
+            userId: session.getCurrentUserId(),
+            email: email,
+            fullName: name.isEmpty ? null : name,
+            token: token,
+          );
+
+      if (enrolled) {
+        _showSnack("Biometrics enabled for this account");
+      }
+    }
+
+    if (!mounted) return;
+    _showSnack("Registration successful. Please login.");
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
   }
 }

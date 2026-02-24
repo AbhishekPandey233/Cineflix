@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:ceniflix/features/bottom_screens/presentation/providers/profile_provider.dart';
 import 'package:ceniflix/core/services/storage/user_session_service.dart';
 import 'package:ceniflix/features/bottom_screens/presentation/pages/bookings_history_screen.dart';
+import 'package:ceniflix/features/sensor/presentation/view_model/biometric_view_model.dart';
+import 'package:ceniflix/features/sensor/presentation/state/biometric_state.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -14,10 +16,53 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _biometricEnabled = false;
+  bool _biometricChecking = false;
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(profileProvider.notifier).loadProfile());
+    Future.microtask(_syncBiometricState);
+
+    ref.listenManual<BiometricState>(biometricViewModelProvider, (prev, next) {
+      if (!mounted) return;
+      if (next.status == BiometricStatus.error && next.errorMessage != null) {
+        _showSnack(next.errorMessage!);
+      }
+    });
+  }
+
+  Future<void> _syncBiometricState() async {
+    final session = ref.read(userSessionServiceProvider);
+    final email = (session.getCurrentUserEmail() ?? '').trim().toLowerCase();
+    if (email.isEmpty) return;
+
+    if (mounted) {
+      setState(() => _biometricChecking = true);
+    }
+
+    final canUse = await ref
+        .read(biometricViewModelProvider.notifier)
+        .canUseForAccount(email);
+
+    if (!mounted) return;
+    setState(() {
+      _biometricEnabled = canUse;
+      _biometricChecking = false;
+    });
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
@@ -117,6 +162,94 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   textAlign: TextAlign.center,
                 ),
               ],
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.fingerprint, color: Colors.white70),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Enable biometrics",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            "Only this account can use fingerprint on this device",
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_biometricChecking)
+                      const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white70,
+                        ),
+                      )
+                    else
+                      Switch.adaptive(
+                        value: _biometricEnabled,
+                        activeColor: const Color(0xFFEF233C),
+                        onChanged: (value) async {
+                          final accountId = email.trim().toLowerCase();
+                          if (accountId.isEmpty) {
+                            _showSnack("No email found for this account");
+                            return;
+                          }
+
+                          setState(() => _biometricChecking = true);
+
+                          if (value) {
+                            final token = await session.getToken();
+                            final enrolled = await ref
+                                .read(biometricViewModelProvider.notifier)
+                                .enrollBiometrics(
+                                  accountId: accountId,
+                                  userId: session.getCurrentUserId(),
+                                  email: accountId,
+                                  fullName: name,
+                                  token: token,
+                                );
+                            if (!mounted) return;
+                            setState(() {
+                              _biometricEnabled = enrolled;
+                              _biometricChecking = false;
+                            });
+                            if (enrolled) {
+                              _showSnack("Biometrics enabled for this account");
+                            }
+                          } else {
+                            await ref
+                                .read(biometricViewModelProvider.notifier)
+                                .clearBinding();
+                            if (!mounted) return;
+                            setState(() {
+                              _biometricEnabled = false;
+                              _biometricChecking = false;
+                            });
+                            _showSnack("Biometrics disabled");
+                          }
+                        },
+                      ),
+                  ],
+                ),
+              ),
               if (state.error != null) ...[
                 Container(
                   margin: const EdgeInsets.only(top: 8),
