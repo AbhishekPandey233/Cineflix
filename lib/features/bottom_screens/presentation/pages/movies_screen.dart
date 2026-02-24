@@ -193,6 +193,7 @@ class _MoviesScreenState extends State<MoviesScreen> {
   void _showMovieDetails(
     BuildContext context, {
     required MovieApiModel movie,
+    bool showBookTicketButton = true,
   }) {
     showDialog(
       context: context,
@@ -268,28 +269,30 @@ class _MoviesScreenState extends State<MoviesScreen> {
                       movie.synopsis,
                       style: const TextStyle(fontSize: 12, color: Colors.white70),
                     ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEF233C),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                    if (showBookTicketButton) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFEF233C),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _openShowtimePicker(movie);
+                          },
+                          child: const Text(
+                            "Book Ticket",
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _openShowtimePicker(movie);
-                        },
-                        child: const Text(
-                          "Book Ticket",
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -498,7 +501,11 @@ class _MoviesScreenState extends State<MoviesScreen> {
                     final movie = comingSoonMovies[index];
                     return _movieCard(
                       movie: movie,
-                      onTap: () => _showMovieDetails(context, movie: movie),
+                      onTap: () => _showMovieDetails(
+                        context,
+                        movie: movie,
+                        showBookTicketButton: false,
+                      ),
                     );
                   },
                 ),

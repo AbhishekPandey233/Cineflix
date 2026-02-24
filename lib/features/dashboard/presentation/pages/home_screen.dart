@@ -255,7 +255,21 @@ class _HomePageBodyState extends State<HomePageBody> {
 
         final nowShowing = snapshot.data?[0] ?? const <MovieApiModel>[];
         final comingSoon = snapshot.data?[1] ?? const <MovieApiModel>[];
-        final popular = nowShowing.take(8).toList();
+        final allMovies = [...nowShowing, ...comingSoon];
+        final popular = allMovies.where((movie) {
+          final title = movie.title.toLowerCase();
+          return title.contains('avatar 3') || title.contains('avengers');
+        }).toList()
+          ..sort((a, b) {
+            int rank(String title) {
+              final lower = title.toLowerCase();
+              if (lower.contains('avatar 3')) return 0;
+              if (lower.contains('avengers')) return 1;
+              return 2;
+            }
+
+            return rank(a.title).compareTo(rank(b.title));
+          });
 
         return SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
@@ -327,50 +341,26 @@ class _HomePageBodyState extends State<HomePageBody> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEF233C),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 13),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: widget.onOpenMovies,
-                            child: const Text(
-                              'BOOK TICKETS NOW',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                              ),
-                            ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFEF233C),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
-                              padding: const EdgeInsets.symmetric(vertical: 13),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: () {},
-                            child: const Text(
-                              'WATCH TRAILER',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
+                        onPressed: widget.onOpenMovies,
+                        child: const Text(
+                          'BOOK TICKETS NOW',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
