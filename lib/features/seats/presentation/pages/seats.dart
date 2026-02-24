@@ -2,7 +2,10 @@ import 'package:ceniflix/core/api/api_client.dart';
 import 'package:ceniflix/features/seats/data/datasources/remote/booking_remote_datasource.dart';
 import 'package:ceniflix/features/seats/data/models/seat_availability_model.dart';
 import 'package:dio/dio.dart';
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 class SeatsScreen extends StatefulWidget {
   const SeatsScreen({
@@ -20,6 +23,9 @@ class SeatsScreen extends StatefulWidget {
 
 class _SeatsScreenState extends State<SeatsScreen> {
   static const int _maxSeats = 10;
+  static const double _shakeThreshold = 18.0;
+  static const Duration _shakeDebounce = Duration(milliseconds: 900);
+
   final BookingRemoteDataSource _bookingRemoteDataSource =
       BookingRemoteDataSource(ApiClient());
 
@@ -29,11 +35,103 @@ class _SeatsScreenState extends State<SeatsScreen> {
 
   SeatAvailabilityModel? _seatData;
   final Set<String> _selectedSeats = <String>{};
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  DateTime _lastShakeAt = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _shakeConfirmDialogVisible = false;
 
   @override
   void initState() {
     super.initState();
     _loadSeatAvailability();
+    _startShakeListener();
+  }
+
+  @override
+  void dispose() {
+    _accelerometerSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _startShakeListener() {
+    _accelerometerSubscription = accelerometerEvents.listen((event) {
+      final now = DateTime.now();
+      if (now.difference(_lastShakeAt) < _shakeDebounce) {
+        return;
+      }
+
+      final magnitude =
+          math.sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+      if (magnitude < _shakeThreshold) {
+        return;
+      }
+
+      _lastShakeAt = now;
+      _onShakeDetected();
+    });
+  }
+
+  Future<void> _onShakeDetected() async {
+    if (!mounted || _booking || _selectedSeats.isEmpty) return;
+
+    if (_shakeConfirmDialogVisible) {
+      Navigator.of(context, rootNavigator: true).pop(true);
+      return;
+    }
+
+    await _showShakeBookingConfirmation();
+  }
+
+  Future<void> _showShakeBookingConfirmation() async {
+    if (_selectedSeats.isEmpty || _booking || _shakeConfirmDialogVisible) return;
+
+    _shakeConfirmDialogVisible = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final selected = _selectedSeats.toList()..sort();
+
+        return AlertDialog(
+          title: const Text('Confirm Booking'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Seats: ${selected.join(', ')}'),
+              const SizedBox(height: 6),
+              Text('Quantity: ${selected.length}'),
+              const SizedBox(height: 6),
+              Text(
+                'Total Price: ₹${_totalPrice.toStringAsFixed(0)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Shake your phone again to confirm booking.',
+                style: TextStyle(color: Colors.black87, fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        );
+      },
+    );
+
+    _shakeConfirmDialogVisible = false;
+
+    if (confirmed == true) {
+      await _confirmBooking();
+    }
   }
 
   Future<void> _loadSeatAvailability() async {
@@ -473,6 +571,13 @@ class _SeatsScreenState extends State<SeatsScreen> {
                             ? null
                             : _showBookingConfirmation,
                         child: Text(_booking ? 'Processing...' : 'Book Seats'),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Center(
+                      child: Text(
+                        'or shake the phone',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
                       ),
                     ),
                     const SizedBox(height: 10),
