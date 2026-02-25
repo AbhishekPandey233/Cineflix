@@ -16,11 +16,18 @@ void main() {
     );
   }
 
+  Future<void> tapSignUpButton(WidgetTester tester) async {
+    final signUpButton = find.widgetWithText(ElevatedButton, 'SIGN UP');
+    await tester.ensureVisible(signUpButton);
+    await tester.pumpAndSettle();
+    await tester.tap(signUpButton);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('Signup: shows snackbar when fields are empty', (tester) async {
     await tester.pumpWidget(wrapWithApp(const SignupScreen()));
 
-    await tester.tap(find.text('SIGN UP'));
-    await tester.pump();
+    await tapSignUpButton(tester);
 
     expect(find.text('Please fill all fields'), findsOneWidget);
   });
@@ -33,8 +40,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(2), '1234567');
     await tester.enterText(find.byType(TextField).at(3), '1234567');
 
-    await tester.tap(find.text('SIGN UP'));
-    await tester.pump();
+    await tapSignUpButton(tester);
 
     expect(find.text('Only Gmail addresses are allowed'), findsOneWidget);
   });
