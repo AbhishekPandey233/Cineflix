@@ -6,7 +6,16 @@ import '../../../bottom_screens/presentation/pages/movies_screen.dart';
 import '../../../bottom_screens/presentation/pages/profile.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    this.homePageBuilder,
+    this.moviesPage,
+    this.profilePage,
+  });
+
+  final Widget Function(VoidCallback onOpenMovies)? homePageBuilder;
+  final Widget? moviesPage;
+  final Widget? profilePage;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -21,9 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _pages = [
-      HomePageBody(onOpenMovies: () => _openTab(1)),
-      const MoviesScreen(),
-      const ProfileScreen(),
+      widget.homePageBuilder?.call(() => _openTab(1)) ??
+          HomePageBody(onOpenMovies: () => _openTab(1)),
+      widget.moviesPage ?? const MoviesScreen(),
+      widget.profilePage ?? const ProfileScreen(),
     ];
   }
 
