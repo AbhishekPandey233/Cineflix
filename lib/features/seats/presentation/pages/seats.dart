@@ -1,11 +1,10 @@
 import 'package:ceniflix/core/api/api_client.dart';
+import 'package:ceniflix/features/sensor/presentation/services/shake_sensor_service.dart';
 import 'package:ceniflix/features/seats/data/datasources/remote/booking_remote_datasource.dart';
 import 'package:ceniflix/features/seats/data/models/seat_availability_model.dart';
 import 'package:dio/dio.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 
 class SeatsScreen extends StatefulWidget {
   const SeatsScreen({
@@ -23,11 +22,10 @@ class SeatsScreen extends StatefulWidget {
 
 class _SeatsScreenState extends State<SeatsScreen> {
   static const int _maxSeats = 10;
-  static const double _shakeThreshold = 18.0;
-  static const Duration _shakeDebounce = Duration(milliseconds: 900);
 
   final BookingRemoteDataSource _bookingRemoteDataSource =
       BookingRemoteDataSource(ApiClient());
+  final ShakeSensorService _shakeSensorService = ShakeSensorService();
 
   bool _loading = true;
   bool _booking = false;
@@ -35,39 +33,19 @@ class _SeatsScreenState extends State<SeatsScreen> {
 
   SeatAvailabilityModel? _seatData;
   final Set<String> _selectedSeats = <String>{};
-  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
-  DateTime _lastShakeAt = DateTime.fromMillisecondsSinceEpoch(0);
   bool _shakeConfirmDialogVisible = false;
 
   @override
   void initState() {
     super.initState();
     _loadSeatAvailability();
-    _startShakeListener();
+    _shakeSensorService.start(_onShakeDetected);
   }
 
   @override
   void dispose() {
-    _accelerometerSubscription?.cancel();
+    _shakeSensorService.stop();
     super.dispose();
-  }
-
-  void _startShakeListener() {
-    _accelerometerSubscription = accelerometerEvents.listen((event) {
-      final now = DateTime.now();
-      if (now.difference(_lastShakeAt) < _shakeDebounce) {
-        return;
-      }
-
-      final magnitude =
-          math.sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
-      if (magnitude < _shakeThreshold) {
-        return;
-      }
-
-      _lastShakeAt = now;
-      _onShakeDetected();
-    });
   }
 
   Future<void> _onShakeDetected() async {
