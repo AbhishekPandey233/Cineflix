@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:ceniflix/core/api/api_endpoint.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
@@ -51,8 +53,10 @@ class ApiClient {
       ),
     );
 
-    // Only add logger in debug mode
-    if (kDebugMode) {
+    final isFlutterTestRun = !kIsWeb && Platform.environment['FLUTTER_TEST'] == 'true';
+
+    // Add logger only for debug app runs (skip during flutter test)
+    if (kDebugMode && !isFlutterTestRun) {
       _dio.interceptors.add(
         PrettyDioLogger(
           requestHeader: true,

@@ -145,6 +145,33 @@ class _FakeHttpClientRequest implements HttpClientRequest {
       return jsonEncode({'data': []});
     }
 
+    if (path.contains('/showtimes/') && path.contains('/seats')) {
+      return jsonEncode({
+        'data': {
+          'showtimeId': 'show_1',
+          'movieId': 'movie_1',
+          'hallId': 'hall_1',
+          'hallName': 'Hall 1',
+          'startTime': '2026-02-26T13:30:00.000Z',
+          'price': 250,
+          'layout': {
+            'rows': ['A', 'B'],
+            'seatsPerRow': 4,
+            'seatIds': ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'],
+          },
+          'bookedSeats': ['A1'],
+        }
+      });
+    }
+
+    if (path.contains('/bookings')) {
+      return jsonEncode({
+        'data': {
+          '_id': 'booking_test_1',
+        }
+      });
+    }
+
     return jsonEncode({'data': []});
   }
 
