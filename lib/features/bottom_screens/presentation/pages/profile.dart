@@ -65,6 +65,40 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
+  Future<void> _showLogoutConfirmationDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text("Confirm Logout"),
+          content: const Text("Are you sure you want to logout?"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text("Go Back"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                final session = ref.read(userSessionServiceProvider);
+                await session.clearSession();
+                ref.read(profileProvider.notifier).clear();
+                if (!mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SignupScreen()),
+                );
+              },
+              child: const Text("Confirm"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -276,15 +310,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: () async {
-                    await session.clearSession();
-                    ref.read(profileProvider.notifier).clear();
-                    if (!context.mounted) return;
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SignupScreen()),
-                    );
-                  },
+                  onPressed: _showLogoutConfirmationDialog,
                   icon: const Icon(Icons.logout),
                   label: const Text("Logout"),
                 ),
