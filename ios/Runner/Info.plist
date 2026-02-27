@@ -51,5 +51,18 @@
 	<string>Allow access to your photo library to save movie tickets.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Allow saving movie tickets to your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.ceniflix.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ceniflix</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -46,5 +46,9 @@ class ApiEndpoints {
   static String showtimesByMovie(String movieId) => '/showtimes/movie/$movieId';
   static String seatAvailability(String showtimeId) => '/showtimes/$showtimeId/seats';
   static String cancelBooking(String bookingId) => '/bookings/$bookingId';
+  static String initiateKhaltiPayment(String bookingId) =>
+      '/bookings/$bookingId/payment/khalti/initiate';
+  static String verifyKhaltiPayment(String bookingId) =>
+      '/bookings/$bookingId/payment/khalti/verify';
   static const String userBookingHistory = '/bookings/user/history';
 }

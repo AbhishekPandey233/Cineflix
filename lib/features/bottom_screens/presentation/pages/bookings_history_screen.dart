@@ -12,6 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr/qr.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class BookingsHistoryScreen extends StatefulWidget {
   const BookingsHistoryScreen({super.key});
@@ -20,7 +21,8 @@ class BookingsHistoryScreen extends StatefulWidget {
   State<BookingsHistoryScreen> createState() => _BookingsHistoryScreenState();
 }
 
-class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
+class _BookingsHistoryScreenState extends State<BookingsHistoryScreen>
+  with WidgetsBindingObserver {
   final BookingRemoteDataSource _bookingRemoteDataSource =
       BookingRemoteDataSource(ApiClient());
 
@@ -29,11 +31,26 @@ class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
   String _error = '';
   String? _cancelingBookingId;
   String? _downloadingBookingId;
+  String? _payingBookingId;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fetchBookings();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _fetchBookings();
+    }
   }
 
   String _extractApiError(DioException error, {required String fallback}) {
@@ -56,9 +73,14 @@ class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
     try {
       final bookings = await _bookingRemoteDataSource.getUserBookings();
 
+      final hasVerifiedAny = await _verifyPendingPayments(bookings);
+      final resolvedBookings = hasVerifiedAny
+          ? await _bookingRemoteDataSource.getUserBookings()
+          : bookings;
+
       if (!mounted) return;
       setState(() {
-        _bookings = bookings;
+        _bookings = resolvedBookings;
       });
     } on DioException catch (e) {
       if (!mounted) return;
@@ -77,6 +99,43 @@ class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _verifyPendingPayments(List<UserBookingModel> bookings) async {
+    final pending = bookings
+        .where(
+          (booking) =>
+              !booking.isPaid &&
+              const {'pending', 'unpaid'}.contains(
+                booking.paymentStatus.toLowerCase(),
+              ) &&
+              (booking.paymentReference ?? '').trim().isNotEmpty,
+        )
+        .toList(growable: false);
+
+    if (pending.isEmpty) return false;
+
+    var hasVerifiedAny = false;
+    for (final booking in pending) {
+      final pidx = booking.paymentReference;
+      if (pidx == null || pidx.trim().isEmpty) continue;
+
+      try {
+        final verified = await _bookingRemoteDataSource.verifyKhaltiPayment(
+          bookingId: booking.id,
+          pidx: pidx,
+        );
+        if (verified) {
+          hasVerifiedAny = true;
+        }
+      } on DioException {
+        // Intentionally ignore here; pending payments can still be in progress.
+      } catch (_) {
+        // Keep UI responsive even if one verification fails.
+      }
+    }
+
+    return hasVerifiedAny;
   }
 
   Future<void> _cancelBooking(String bookingId) async {
@@ -110,6 +169,61 @@ class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
       if (mounted) {
         setState(() {
           _cancelingBookingId = null;
+        });
+      }
+    }
+  }
+
+  String _paymentStateLabel(UserBookingModel booking) {
+    if (booking.isPaid) return 'Payment done';
+
+    final status = booking.paymentStatus.trim();
+    if (status.isNotEmpty) {
+      return status[0].toUpperCase() + status.substring(1);
+    }
+
+    return 'Pending';
+  }
+
+  Future<void> _payBooking(UserBookingModel booking) async {
+    setState(() {
+      _payingBookingId = booking.id;
+      _error = '';
+    });
+
+    try {
+      final paymentInit = await _bookingRemoteDataSource.initiateKhaltiPayment(booking.id);
+      final uri = Uri.tryParse(paymentInit.paymentUrl);
+      if (uri == null) {
+        throw Exception('Invalid payment URL from server');
+      }
+
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        throw Exception('Could not open Khalti checkout');
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Complete payment in Khalti and return to app.'),
+        ),
+      );
+      await _fetchBookings();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = _extractApiError(e, fallback: 'Failed to start payment');
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _payingBookingId = null;
         });
       }
     }
@@ -599,6 +713,11 @@ class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
                                           label: 'Booked on',
                                           value: _formatDate(booking.createdAt),
                                         ),
+                                        _DetailTile(
+                                          icon: Icons.payments_outlined,
+                                          label: 'Payment',
+                                          value: _paymentStateLabel(booking),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -669,6 +788,46 @@ class _BookingsHistoryScreenState extends State<BookingsHistoryScreen> {
                                           : 'Download Ticket',
                                     ),
                                   ),
+                                  if (booking.requiresPayment)
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF0EA5E9),
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 10,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                      onPressed: _payingBookingId == booking.id
+                                          ? null
+                                          : () => _payBooking(booking),
+                                      child: Text(
+                                        _payingBookingId == booking.id
+                                            ? 'Opening Khalti...'
+                                            : 'Pay',
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF065F46),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Text(
+                                        'Payment Done',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
                                   if (booking.isConfirmed)
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
