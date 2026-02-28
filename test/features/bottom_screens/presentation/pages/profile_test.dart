@@ -95,6 +95,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.text('Confirm Logout'), findsOneWidget);
+    await tester.tap(find.text('Confirm'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
     expect(find.byType(SignupScreen), findsOneWidget);
     expect(fakeSession.cleared, isTrue);
   });
