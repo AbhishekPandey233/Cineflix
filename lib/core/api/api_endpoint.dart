@@ -7,8 +7,8 @@ class ApiEndpoints {
   // Configuration
   // Set true only when running on a real phone connected to the same Wi-Fi.
   // For Android emulator, keep this false so host resolves to 10.0.2.2.
-  static const bool isPhysicalDevice = false;
-  static const String _ipAddress = '192.168.1.66';
+  static const bool isPhysicalDevice = true;
+  static const String _ipAddress = '172.26.0.141';
   static const int _port = 5000;
 
   // Base URLs
