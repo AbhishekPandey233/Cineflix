@@ -1,5 +1,4 @@
-# ceniflix
-
+# cineflix
 CineFlix is a Flutter-based mobile application that allows users to browse movies, select seats, and book tickets easily from their smartphones.
 
 How to Use the App
